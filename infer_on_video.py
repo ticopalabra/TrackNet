@@ -165,9 +165,10 @@ def write_track(frames, ball_track, bounces, path_output_video, fps, trace=7):
                     x = int(ball_track[num-i][0])
                     y = int(ball_track[num-i][1])
                     
+                    # the ball track is normally green while when the ball bounces it is red (for 2 frames)
                     color = (0,255,0) #green
                     if bounces is not None and len(bounces)>0:
-                        if num in bounces:
+                        if num in bounces or num-1 in bounces:
                             color = (0,0,255) #red
                     frame = cv2.circle(frame, (x,y), radius=0, color=color, thickness=10-i)
                 else:
