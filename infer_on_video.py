@@ -2,6 +2,7 @@ from model import BallTrackerNet
 from bounce_detector import BounceDetector
 import torch
 import cv2
+import csv
 from general import postprocess
 from tqdm import tqdm
 import numpy as np
@@ -19,7 +20,12 @@ def read_video(path_video):
         fps: frames per second
     """
     cap = cv2.VideoCapture(path_video)
+    if not cap.isOpened():
+        raise IOError("VideoCapture object for '{}' could not be opened".format(path_video))
+
     fps = int(cap.get(cv2.CAP_PROP_FPS))
+    if fps == 0:
+        raise IOError("Could not get frames per second for '{}'".format(path_video))
 
     frames = []
     while cap.isOpened():
@@ -28,7 +34,11 @@ def read_video(path_video):
             frames.append(frame)
         else:
             break
+
     cap.release()
+    if not frames:
+        raise IOError("No frames were read from '{}'".format(path_video))
+
     return frames, fps
 
 def infer_model(frames, model):
@@ -138,10 +148,12 @@ def write_track(frames, ball_track, bounces, path_output_video, fps, trace=7):
     :params
         frames: list of original video frames
         ball_track: list of ball coordinates
+        bounces: list of bounce frames
         path_output_video: path to output video
         fps: frames per second
         trace: number of frames with detected trace
     """
+
     height, width = frames[0].shape[:2]
     out = cv2.VideoWriter(path_output_video, cv2.VideoWriter_fourcc(*'DIVX'), 
                           fps, (width, height))
@@ -152,10 +164,11 @@ def write_track(frames, ball_track, bounces, path_output_video, fps, trace=7):
                 if ball_track[num-i][0]:
                     x = int(ball_track[num-i][0])
                     y = int(ball_track[num-i][1])
-                    if num in bounces:
-                        color = (0,0,255) #red
-                    else:
-                        color = (0,255,0) #green
+                    
+                    color = (0,255,0) #green
+                    if bounces is not None and len(bounces)>0:
+                        if num in bounces:
+                            color = (0,0,255) #red
                     frame = cv2.circle(frame, (x,y), radius=0, color=color, thickness=10-i)
                 else:
                     break
@@ -170,6 +183,7 @@ if __name__ == '__main__':
     parser.add_argument('--video_path', type=str, help='path to input video')
     parser.add_argument('--video_out_path', type=str, help='path to output video')
     parser.add_argument('--extrapolation', action='store_true', help='whether to use ball track extrapolation')
+    parser.add_argument('--path_ball_track', type=str, help='path to ball track detection results (csv file)')
     parser.add_argument('--path_bounce_model', type=str, help='path to pretrained model for bounce detection')
     args = parser.parse_args()
     
@@ -179,7 +193,10 @@ if __name__ == '__main__':
     model = model.to(device)
     model.eval()
     
+    print('Loading the video...')
     frames, fps = read_video(args.video_path)
+    print('Number of frames = {}'.format(len(frames)))
+    print("Ball track detection...")
     ball_track, dists = infer_model(frames, model)
     ball_track = remove_outliers(ball_track, dists)
         
@@ -190,15 +207,32 @@ if __name__ == '__main__':
             ball_subtrack = ball_track[r[0]:r[1]]
             ball_subtrack = interpolation(ball_subtrack)
             ball_track[r[0]:r[1]] = ball_subtrack
+    
+    #print(ball_track)
+    #save the ball track in a csv file with the format: frame number, x_coord, y_coord (write -1 if coord are None)   
+    if args.path_ball_track:
+        with open(args.path_ball_track, 'w') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(["Frame Number", "X Coord", "Y Coord"])  # header row
+            for i, (x, y) in enumerate(ball_track):
+                x_coord = x if x is not None else -1
+                y_coord = y if y is not None else -1
+                writer.writerow([i+1, x_coord, y_coord])
 
     # bounce detection
-    print("Bounce detection...")
-    bounce_detector = BounceDetector(args.path_bounce_model)
-    x_ball = [x[0] for x in ball_track]
-    y_ball = [x[1] for x in ball_track]
-    bounces = bounce_detector.predict(x_ball, y_ball)
+    if args.path_bounce_model:
+        print("Bounce detection...")
+        bounce_detector = BounceDetector(args.path_bounce_model)
+        x_ball = [x[0] for x in ball_track]
+        y_ball = [x[1] for x in ball_track]
+        bounces = bounce_detector.predict(x_ball, y_ball)
+        write_track(frames, ball_track, bounces, args.video_out_path, fps)
+    else:    
+        write_track(frames, ball_track, [], args.video_out_path, fps)
+    
+    print("Done.")    
 
-    write_track(frames, ball_track, bounces, args.video_out_path, fps)
+    
 
 
 
