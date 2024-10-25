@@ -53,6 +53,11 @@ https://drive.google.com/file/d/1XEYZ4myUN7QT-NeBYJI0xteLsvs-ZAOl/view?usp=shari
 ![](pics/video_infer.gif)
 Run `python infer_on_video.py <args>` to launch inference on the video. 
 
+Hint: use mpv to play the videos and go back/forward (,/.) frame by frame 
+
 ## Reference
 [https://arxiv.org/abs/1907.03698](https://arxiv.org/abs/1907.03698) <br>
 TrackNet: A Deep Learning Network for Tracking High-speed and Tiny Objects in Sports Applications
+
+WARNING
+infer_on_video.py:171: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.

@@ -1,4 +1,5 @@
 from model import BallTrackerNet
+from bounce_detector import BounceDetector
 import torch
 import cv2
 from general import postprocess
@@ -7,6 +8,7 @@ import numpy as np
 import argparse
 from itertools import groupby
 from scipy.spatial import distance
+
 
 def read_video(path_video):
     """ Read video file    
@@ -131,7 +133,7 @@ def interpolation(coords):
     track = [*zip(x,y)]
     return track
 
-def write_track(frames, ball_track, path_output_video, fps, trace=7):
+def write_track(frames, ball_track, bounces, path_output_video, fps, trace=7):
     """ Write .avi file with detected ball tracks
     :params
         frames: list of original video frames
@@ -150,7 +152,11 @@ def write_track(frames, ball_track, path_output_video, fps, trace=7):
                 if ball_track[num-i][0]:
                     x = int(ball_track[num-i][0])
                     y = int(ball_track[num-i][1])
-                    frame = cv2.circle(frame, (x,y), radius=0, color=(0, 0, 255), thickness=10-i)
+                    if num in bounces:
+                        color = (0,0,255) #red
+                    else:
+                        color = (0,255,0) #green
+                    frame = cv2.circle(frame, (x,y), radius=0, color=color, thickness=10-i)
                 else:
                     break
         out.write(frame) 
@@ -164,26 +170,38 @@ if __name__ == '__main__':
     parser.add_argument('--video_path', type=str, help='path to input video')
     parser.add_argument('--video_out_path', type=str, help='path to output video')
     parser.add_argument('--extrapolation', action='store_true', help='whether to use ball track extrapolation')
+    parser.add_argument('--path_bounce_model', type=str, help='path to pretrained model for bounce detection')
     args = parser.parse_args()
     
     model = BallTrackerNet()
     device = 'cuda'
-    model.load_state_dict(torch.load(args.model_path, map_location=device))
+    model.load_state_dict(torch.load(args.model_path, weights_only=True, map_location=device))
     model = model.to(device)
     model.eval()
     
     frames, fps = read_video(args.video_path)
     ball_track, dists = infer_model(frames, model)
-    ball_track = remove_outliers(ball_track, dists)    
-    
+    ball_track = remove_outliers(ball_track, dists)
+        
     if args.extrapolation:
+        print("Ball track extrapolation...")
         subtracks = split_track(ball_track)
         for r in subtracks:
             ball_subtrack = ball_track[r[0]:r[1]]
             ball_subtrack = interpolation(ball_subtrack)
             ball_track[r[0]:r[1]] = ball_subtrack
-        
-    write_track(frames, ball_track, args.video_out_path, fps)    
+
+    # bounce detection
+    print("Bounce detection...")
+    bounce_detector = BounceDetector(args.path_bounce_model)
+    x_ball = [x[0] for x in ball_track]
+    y_ball = [x[1] for x in ball_track]
+    bounces = bounce_detector.predict(x_ball, y_ball)
+
+    write_track(frames, ball_track, bounces, args.video_out_path, fps)
+
+
+
     
     
     
